@@ -7,7 +7,7 @@
 		[DEBUG] isCustomerKeyBankCipher:926: keyBankOffset=0x168e00
 		[DEBUG] isCustomerKeyBankCipher:927: keyBankSize=0x450
 
-	keyBankOffset - is an offset of the key bank section in the mboot
+	keyBankOffset - is an offset of the key bank section in the mboot, if unspecified or 0x0, we check the MBOOT header
 	keyBankSize - section size
 
 	There will be similar lines for the key bank backup.
@@ -58,21 +58,39 @@
 	    U8 crc[4];
 	}CUSTOMER_KEY_BANK;
 
+	typedef struct
+	{
+		_SUB_SECURE_INFO SecureInfo;
+		U8 u8MSID[4];
+		U32 u32TkbVersion;
+		U8 u8RSATEEKey[RSA_PUBLIC_KEY_LEN];
+		U8 u8AESTEEKey[AES_KEY_LEN];
+	} TEE_KEY_BANK;
+
+	typedef struct
+	{
+		_SUB_SECURE_INFO SecureInfo;
+		U8 u8RSAKey[RSA_PUBLIC_KEY_LEN];
+		U8 u8AESKey[AES_KEY_LEN];
+	} REE_KEY_BANK;
+
 	==== End Key bank structures ===
 
 '''
+
 
 from ctypes import *
 import os
 import sys
 import utils
+import struct
 
 DEBUG = False
 
 # Default values
 defOutFolder = "keys"
-defOffet = "0x168e00"
-defSize = "0x450"
+#defOffet = "0x168e00"
+defSize = "0x600"
 #defKey="hex:E01001FF0FAA55FC924D535441FF0700"
 
 # Structures
@@ -111,25 +129,58 @@ class CUSTOMER_KEY_BANK(Structure):
 
 # Command line args
 if len(sys.argv) == 1: 
-	print ("Usage: extract_keys.py <path to mboot> [<folder to store keys>] [<key bank offset>] [<key bank size>]")
+	print ("Usage: extract_keys.py <path to mboot> [<folder to store keys>] [<key bank offset>]")
+	print ("If you don't enter the offset (or you enter 0x0) the script gets the offset from the MBOOT header")
 	print ("Defaults: ")
 	print ("          <folder to store keys> 	keys")
-	print ("          <key bank offset> 		0x168e00")
-	print ("          <key bank size> 			0x450")
-	#print ("          <custom decription key> 	Efuse Key")
+	print ("          <key bank offset> 		0x0")
 	print ("Example: extract_keys.py ./unpacked/MBOOT.img")
-	print ("Example: extract_keys.py ./unpacked/MBOOT.img ./keys 0x169e00 0x450")
+	print ("Example: extract_keys.py ./unpacked/MBOOT.img ./keys 0x169e00")
 	quit()
 
 
 mboot = sys.argv[1]
 outFolder = sys.argv[2] if len(sys.argv) >= 3 else defOutFolder
-offestStr = sys.argv[3] if len(sys.argv) >= 4 else defOffet
-sizeStr = sys.argv[4] if len(sys.argv) >= 5 else defSize
+offsetStr = sys.argv[3] if len(sys.argv) >= 4 else "0x0"
+offset = int(offsetStr, 16)
+sizeStr = sys.argv[4] if len(sys.argv) >= 5 else "0x0"
+size = int(sizeStr, 16)
 #hwKey = sys.argv[5] if len(sys.argv) >= 6 else defKey
 
-offset = int(offestStr, 16)
-size = int(sizeStr, 16)
+#If the offset wasn't specified in the args
+#Try to load the offset from the MBOOT header
+with open(mboot, 'rb') as file:
+	if offset == 0:
+		file.seek(0, os.SEEK_END)
+		fileSize = file.tell()
+		file.seek(0x4c)
+		rawOffset = file.read(4)
+		offset = struct.unpack('<I', rawOffset)[0]
+		if (DEBUG):
+			print ( "[i] offset from header is:{}".format( hex(offset) ) )
+		# Sanity check that the offset isn't null or past the end of the file
+		if offset == 0 or offset > fileSize:
+			print( "[e] offset not specified, and we weren't able to find one in the header")
+			exit(-1)
+	# Load secure info
+	file.seek(offset)
+	secIdentityBytes= file.read(sizeof(SUB_SECURE_INFO))
+	secIdentity = utils.unpackStructure(SUB_SECURE_INFO, secIdentityBytes)
+	# make sure it starts with SECURITY
+	if (DEBUG):
+		print ( "[i] u8SecIdentify:{}".format( bytes(secIdentity.u8SecIdentify).decode("utf-8") ) ) 
+	if bytes(secIdentity.u8SecIdentify).decode("utf-8") != "SECURITY":
+		print( "[e] u8SecIdentify is not SECURITY at: "+ hex(offset) )
+		exit(-1)
+	# get the size from our secure identity
+	size = secIdentity.info.u32Size + sizeof(SUB_SECURE_INFO)
+	if (DEBUG):
+		print ( "[i] size from secure header is:{}".format( hex(size) ) )
+
+
+if size == 0:
+		print( "[w] couldn't find bank size from the header, defaulting to "+ defSize)
+		size = defSize
 
 # Create out directory 
 print ("[i] Create output directory")
@@ -144,6 +195,12 @@ utils.copyPart(mboot, outEncKeyBankFile, offset, size)
 print ("[i] Unpack key bank structure")
 keyBankBytes = utils.loadPart(outEncKeyBankFile, 0, size)
 keyBank = utils.unpackStructure(CUSTOMER_KEY_BANK, keyBankBytes)
+try:
+	magicStr = bytes(keyBank.u8MagicID).decode('utf-8')
+	if(magicStr != "Mstar.Key.Bank.."):
+		raise(RuntimeError("oops, not Mstar.Key.Bank.."))
+except:
+	print ( "[w] u8MagicID is wrong. Check that this is actually the keybank")
 
 if (DEBUG):
 	# Print all

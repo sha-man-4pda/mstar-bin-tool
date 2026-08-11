@@ -392,9 +392,9 @@ else:
 		print ('[i]      Magic: {}'.format(MAGIC_FOOTER))
 		footer.write(MAGIC_FOOTER.encode())
 		print ('[i]      Header CRC: 0x{:02X}'.format(headerCRC))
-		footer.write(struct.pack('L', headerCRC)) # struct.pack('L', data) <- returns byte swapped data
+		footer.write(struct.pack('<L', headerCRC)) # struct.pack('L', data) <- returns byte swapped data
 		print ('[i]      Bin CRC: 0x{:02X}'.format(binCRC))
-		footer.write(struct.pack('L', binCRC))
+		footer.write(struct.pack('<L', binCRC))
 		print ('[i]      First 16 bytes of header: {}'.format(header16bytes))
 		footer.write(header16bytes)
 
