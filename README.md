@@ -31,7 +31,7 @@ You may need to replace them with the ones compiled for your system.
 	$make
 	Replace simg2img, img2simg, simg2simg binaries in mstar-bin-tool/bin/linux folder.
 	
-* Cannot support signature generation on Linux because of unknown custom algorithm used in rsa_sign.exe to create signature.
+* Signature generation is not supported on Linux yet.
 
 ## Unpack MStar bin firmware files
 
@@ -104,7 +104,7 @@ That script is used to encrypt image and generate sign file.
 Usage: secure_partition.py <file to encrypt> <AES key file> <RSA private key file> <RSA public key file> <output encrypted file> <output signature file>
 Example: secure_partition.py ./pack/boot.img ./keys/AESbootKey ./keys/RSAboot_priv.txt ./keys/RSAboot_pub.txt ./pack/boot.img.aes ./pack/bootSign
 ```
-* Cannot support this feature on linux because of unknown custom algorithm used in rsa_sign.exe to create sign.
+* This feature is not supported on linux yet.
 
 ## Extract keys from Mstar.Key.Bank structure
 AES keys can be extracted from MBOOT with extract_keys.py script. 
