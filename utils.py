@@ -1,3 +1,5 @@
+# utils.py v1.5
+
 import re
 import os
 import shutil
@@ -7,16 +9,14 @@ import math
 import ctypes
 import subprocess
 import zlib
+import glob
 
 B  = 2**00
 KB = 2**10
 MB = 2**20
 GB = 2**30
 
-LZ4_BLOCKSIZE = 8 * MB
-
 def sizeInt(s):
-
     value = int(s.strip(string.ascii_letters))
     unit = s.strip(string.digits)
     if not unit:
@@ -61,13 +61,11 @@ def createDirectory(dir):
 def splitFile(file, destdir, chunksize):
     (name, ext) = os.path.splitext(os.path.basename(file))
     chunks = []
-
     # Just copy file if its size is less than chunk size
     if os.path.getsize(file) < chunksize or chunksize == 0:
         chunk = os.path.join(destdir, name + ext)
         shutil.copyfile(file, chunk)
         return [chunk]
-
     # Split in chunks and copy
     data = True
     while data:
@@ -77,27 +75,8 @@ def splitFile(file, destdir, chunksize):
             chunks.append(chunk)
             with open(chunk, 'wb') as f2:
                 f2.write(data)  
-
     assert len(chunks) <= 9999          
     return chunks
-    
-def sparse_split(file, destdir, chunksize):
-    (name, ext) = os.path.splitext(os.path.basename(file))
-    chunks = []
-
-    # Just return file if its size is less than chunk size
-    if os.path.getsize(file) < chunksize or chunksize == 0:
-        return [file]
-        
-    # Split to chunks
-    src = os.path.join(destdir, name + ext)
-    dest = os.path.join(destdir, name + "_sparse")
-    os.system('bin\\sparse\\simg2simg.exe' + ' {} {} {}'.format(src, dest, chunksize))
-    namesList = list(filter(lambda s: s.startswith(name + '_sparse'), os.listdir(destdir)))
-    for name in namesList:
-        chunks.append(os.path.join(destdir, name))
-    return chunks
- 
 
 def writeFile(file, data):
     with open(file, 'wb') as f:
@@ -119,7 +98,7 @@ def appendFile(src, dest, bufsize = 16 * MB):
             while data:
                 data = f1.read(bufsize)
                 f2.write(data)
-                
+
 # Append src data to dest file
 # bufsize - chunk size
 def appendData(src, dest):
@@ -135,7 +114,6 @@ def appendData(src, dest):
 def copyPart(src, dest, offset, size, bufsize = 16 * MB, append = False):
     if not os.path.exists(dest):
         append = False
-
     with open(src, 'rb') as f1:
         f1.seek(offset)
         with open(dest, 'ab' if append else 'wb') as f2:
@@ -162,38 +140,69 @@ def alignFile(file, base = 0x1000):
     if result:
         with open(file, 'ab') as f:
             f.write(('\xff' * result).encode(encoding='iso-8859-1'))
-            
+
 # unlz4
 def unlz4(src, dest) :
-    lz4_path = 'bin\\win32\\TinyZZZ.exe' if os.name == 'nt' else 'bin/linux-x86/TinyZZZ'
+    lz4_path = 'bin\\win32\\TinyZZZ.exe' if os.name == 'nt' else 'bin/linux/tinyZZZ'
     lz4 = os.path.abspath(lz4_path)
     command = [lz4, '-d', '--lz4', src, dest]
     subprocess.run(command, stdout=subprocess.DEVNULL)
-    
+
 # unlzma
 def unlzma(src, dest) :
-    lzma_path = 'bin\\win32\\TinyZZZ.exe' if os.name == 'nt' else 'bin/linux-x86/TinyZZZ'
+    lzma_path = 'bin\\win32\\TinyZZZ.exe' if os.name == 'nt' else 'bin/linux/tinyZZZ'
     lzma = os.path.abspath(lzma_path)
     command = [lzma, '-d', '--lzma', src, dest]
     subprocess.run(command, stdout=subprocess.DEVNULL)
 
 # unlzo
-# if NT then use ./bin/lzo.exe
 def unlzo(src, dest):
-    lzop = 'bin\\win32\\lzop.exe' if os.name == 'nt' else 'bin/linux-x86/lzop'
+    lzop = 'bin\\win32\\lzop.exe' if os.name == 'nt' else 'lzop'
     os.system(lzop + ' -o {} -d {}'.format(dest, src))
 
 # lzo
-# if NT then use ./bin/lzo.exe
 def lzo(src, dest):
-    lzop = 'bin\\win32\\lzop.exe' if os.name == 'nt' else 'bin/linux-x86/lzop'
+    lzop = 'bin\\win32\\lzop.exe' if os.name == 'nt' else 'lzop'
     os.system(lzop + ' -o {} -1 {}'.format(dest, src))
-    
+
+# converts sparse.* chunks to .img
 def sparse_to_img (src, dest):
-    os.system('bin\\sparse\\simg2img.exe' + ' {} {}'.format(src, dest))
-    
+    simg2img = 'bin\\win32\\sparse\\simg2img.exe' if os.name == 'nt' else 'bin/linux/simg2img'
+    command = f'"{os.path.abspath(simg2img)}" {src} {dest}'
+    subprocess.run(command, shell=True, stdout=subprocess.DEVNULL)
+
+# converts .img to sparse.* chunks   
 def img_to_sparse (src, dest):
-    os.system('bin\\sparse\\img2simg.exe' + ' {} {}'.format(src, dest))
+    img2simg = 'bin\\win32\\sparse\\img2simg.exe' if os.name == 'nt' else 'bin/linux/img2simg'
+    command = f'"{os.path.abspath(img2simg)}" {src} {dest}'
+    subprocess.run(command, shell=True, stdout=subprocess.DEVNULL)
+    
+def sparse_split(file, destdir, chunksize):
+    (name, ext) = os.path.splitext(os.path.basename(file))
+    chunks = []
+    # Just return file if its size is less than chunk size
+    if os.path.getsize(file) < chunksize or chunksize == 0:
+        return [file]
+    # Split to chunks
+    simg2simg = 'bin\\win32\\sparse\\simg2simg.exe' if os.name == 'nt' else 'bin/linux/simg2simg'
+    src = os.path.join(destdir, name + ext)
+    dest = os.path.join(destdir, name + "_sparse")
+    command = [os.path.abspath(simg2simg), src, dest, str(chunksize)]
+    subprocess.run(command, stdout=subprocess.DEVNULL)
+    # List filenames
+    namesList = list(filter(lambda s: s.startswith(name + '_sparse'), os.listdir(destdir)))
+    for name in namesList:
+        chunks.append(os.path.join(destdir, name))
+    return chunks
+
+# removes sparse.* chunks    
+def sparse_delete (mask):
+    files_to_delete = glob.glob(mask)
+    for file_path in files_to_delete:
+        try:
+            os.remove(file_path)
+        except OSError as e:
+            print(f"[WARNING] Cannot delete file {file_path}: {e}")
 
 # Calculate crc32
 # file - filename of a file to calculate
@@ -234,27 +243,27 @@ def parceArgs(string):
 def processFilePartLoad(line):
     args = parceArgs(line)
     return {'cmd': args[0], 'addr': args[1], 'sourceFile': args[2], 'offset': args[3], 'size': args[4]}
-    
+
 def processLZ4(line):
     args = parceArgs(line)
     return {'cmd': args[0], 'in_size': args[3], 'out_size': args[5], 'partition_name': 'lz4'}
-    
+
 def processMscompress7(line):
     args = parceArgs(line)
     return {'cmd': args[0], 'in_size': args[4], 'partition_name': 'mscompress7'}
-    
+
 def processMw(line):
     args = parceArgs(line)
     return {'cmd': args[0], 'addr': args[1], 'value': args[2], 'count' : args[3], 'partition_name': 'crc32'}
-    
+
 def processStoreSecureInfo(line):
     args = parceArgs(line)
     return {'cmd': args[0], 'partition_name': args[1], 'addr': args[2]} 
-    
+
 def processStoreNuttxConfig(line):
     args = parceArgs(line)
     return {'cmd': args[0], 'partition_name': args[1], 'addr': args[2]}
-    
+
 def processSparseWrite(line):
     args = parceArgs(line)
     return {'cmd': args[0], 'action': args[1], 'addr': args[2], 'partition_name': args[3], 'size': args[4]}
@@ -297,7 +306,6 @@ def processMmc(line):
             res['empty_skip'] = 0
         return res
 
-
     elif args[1] == 'write.boot' or args[1] == 'write':
         # mmc write[.boot] bootpart addr blk# size [empty_skip:0-disable,1-enable]
         res = {'cmd': args[0], 'action': args[1], 'bootpart': args[2], 'addr': args[3], 'blk#': args[4], 'size': args[5], 'partition_name': 'sboot'}
@@ -329,7 +337,6 @@ def processMmc(line):
     #   print 'Unknown mmc action'
     #   print args
 
-
 # TODO rewrite it
 fileNameCounter = {}
 def generateFileName(outputDirectory, part, ext):
@@ -341,7 +348,7 @@ def generateFileName(outputDirectory, part, ext):
             fileNameCounter[part['partition_name']] = 1
         fileName = os.path.join(outputDirectory, part['partition_name'] + str(fileNameCounter[part['partition_name']]) + ext)
     return fileName
-    
+
 fileExtCounter = {}
 def generateFileNameSparse(outputDirectory, part):
     fileName = os.path.join(outputDirectory, part['partition_name'] + '_sparse.0')
@@ -352,10 +359,6 @@ def generateFileNameSparse(outputDirectory, part):
             fileExtCounter[part['partition_name']] = 1
         fileName = os.path.join(outputDirectory, part['partition_name'] + '_sparse.' + str(fileExtCounter[part['partition_name']]))
     return fileName
-    
-def convertInputSparseName(filename):
-    filename = filename.replace("\\", "/");
-    return filename
 
 def directive(header, dramBufAddr, useHexValuesPrefix):
 
@@ -424,13 +427,13 @@ def directive(header, dramBufAddr, useHexValuesPrefix):
             header.write('sparse_write mmc 0x{} {} $(filesize)\n'.format(memoryOffset, name).encode())
         else:
             header.write('sparse_write mmc {} {} $(filesize)\n'.format(memoryOffset, name).encode())
-            
+
     def write_multi2optee(name, memoryOffset=dramBufAddr):
         if (useHexValuesPrefix):
             header.write('multi2optee 0x{} {} $(filesize)\n'.format(memoryOffset, name).encode())
         else:
             header.write('multi2optee {} {} $(filesize)\n'.format(memoryOffset, name).encode())
-                        
+
     directive.filepartload = filepartload   
     directive.create = create   
     directive.erase_p = erase_p 
@@ -455,7 +458,7 @@ def unpackStructure(s, b):
 def writeRSAPublicKey(file, key):
     writeFile(file, 
         str.encode( "N = {}\nE = {}".format(hexString(key.N, ''), hexString(key.E, '')) ))
-    
+
         #Looks for the first unprintable character in data, returns its index
 def find_first_non_printable_index(data) -> int:
     # Allowed bytes: ASCII 32-126 + TAB, LF, CR
@@ -474,7 +477,7 @@ def get_variable_value(text: str, var_name: str) -> int:
         # Converting to int
         return int(match.group(1), 16)
     return None
-    
+
         #Looks for Mstar script at specified offset, returns script
 def is_mstar_script( in_file: str, offset: int, size: int) -> str:
     header = loadPart(in_file, offset, size)
@@ -485,30 +488,23 @@ def is_mstar_script( in_file: str, offset: int, size: int) -> str:
         end_script = header[end_offset-40:].find('\x25'.encode(encoding='iso-8859-1'))
         if end_script != -1 :
             header_script = header[:end_offset].decode()
-            #copyPart(in_file, os.path.join(outputDirectory, "~header"), 0, HEADER_SIZE)
             return header_script
     return None
-    
+
         # Decrypts in_file data using OpenSSL
         # AES-128-CBC-NoPadding or AES-128-ECB-NoPadding algorithm
-        # Writes decrypted data to out_file
+        # Saves decrypted data to out_file
 def aes_decrypt(in_file: str, out_file: str, cbc_ecb: str, aes_key: bytes, iv:bytes):
     command = 'openssl aes-128-' + cbc_ecb + ' -d  -nopad -K ' + aes_key.hex()
     if (cbc_ecb == 'cbc') or (cbc_ecb == 'CBC') : 
         command += ' -iv ' + iv.hex()
     command += ' -in ' + in_file + ' -out ' + out_file
-#    print (command)
     os.system(command)  
 
         # Checks whether OpenSSL is installed
 def check_openssl_cli():
     try:
-        result = subprocess.run(
-            ["openssl", "version"],
-            capture_output=True,
-            text=True,
-            check=True
-        )
+        result = subprocess.run(["openssl", "version"], capture_output=True, text=True, check=True)
         return True
     except (subprocess.CalledProcessError, FileNotFoundError):
         return False
