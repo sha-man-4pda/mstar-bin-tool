@@ -1,4 +1,4 @@
-# utils.py v1.5
+# utils.py v1.6
 
 import re
 import os
@@ -15,6 +15,11 @@ B  = 2**00
 KB = 2**10
 MB = 2**20
 GB = 2**30
+
+CONTINUE_MODE_ID = b'\x53\x45\x43\x55\x52\x49\x54\x59'      # 'SECURITY'
+INTERLEAVE_MODE_ID = b'\x49\x4E\x54\x45\x52\x4C\x56\x45'    # 'INTERLVE'
+CHUNK_NUMBER = b'\x01\x00\x00\x00'                          # Always equal to 1 for non-interleave mode
+MSTAR_SIGN_SIZE = 0x220
 
 def sizeInt(s):
     value = int(s.strip(string.ascii_letters))
@@ -136,7 +141,7 @@ def loadPart(file, offset, size):
 # file - input file to align
 # base - alignment base
 def alignFile(file, base = 0x1000):
-    result = base - os.path.getsize(file) % base
+    result = (base - os.path.getsize(file) % base) % base
     if result:
         with open(file, 'ab') as f:
             f.write(('\xff' * result).encode(encoding='iso-8859-1'))
@@ -157,13 +162,23 @@ def unlzma(src, dest) :
 
 # unlzo
 def unlzo(src, dest):
-    lzop = 'bin\\win32\\lzop.exe' if os.name == 'nt' else 'lzop'
-    os.system(lzop + ' -o {} -d {}'.format(dest, src))
+    if not check_lzop_cli() :
+        print('[!] To decompress LZO you need to install lzop')
+        return False
+    else:
+        lzop = 'bin\\win32\\lzop.exe' if os.name == 'nt' else 'lzop'
+        os.system(lzop + ' -o {} -d {}'.format(dest, src))
+        return True
 
 # lzo
 def lzo(src, dest):
-    lzop = 'bin\\win32\\lzop.exe' if os.name == 'nt' else 'lzop'
-    os.system(lzop + ' -o {} -1 {}'.format(dest, src))
+    if not check_lzop_cli() :
+        print('[!] To compress LZO you need to install lzop')
+        return False
+    else:
+        lzop = 'bin\\win32\\lzop.exe' if os.name == 'nt' else 'lzop'
+        os.system(lzop + ' -o {} -1 {}'.format(dest, src))
+        return True
 
 # converts sparse.* chunks to .img
 def sparse_to_img (src, dest):
@@ -399,7 +414,7 @@ def directive(header, dramBufAddr, useHexValuesPrefix):
         else:
             header.write('mmc write.p {} {} {} {}\n'.format(memoryOffset, name, size, emptySkip).encode())
 
-    # TODO Add support 
+    # TODO Add support
     # mmc write.p(.continue|.cont) addr partition_name offset size [empty_skip:0-disable,1-enable]
 
     def store_secure_info(name, memoryOffset=dramBufAddr):
@@ -434,14 +449,14 @@ def directive(header, dramBufAddr, useHexValuesPrefix):
         else:
             header.write('multi2optee {} {} $(filesize)\n'.format(memoryOffset, name).encode())
 
-    directive.filepartload = filepartload   
-    directive.create = create   
-    directive.erase_p = erase_p 
-    directive.unlzo = unlzo 
-    directive.unlzo_cont = unlzo_cont   
-    directive.write_p = write_p 
-    directive.store_secure_info = store_secure_info 
-    directive.store_nuttx_config = store_nuttx_config   
+    directive.filepartload = filepartload
+    directive.create = create
+    directive.erase_p = erase_p
+    directive.unlzo = unlzo
+    directive.unlzo_cont = unlzo_cont
+    directive.write_p = write_p
+    directive.store_secure_info = store_secure_info
+    directive.store_nuttx_config = store_nuttx_config
     directive.write_boot = write_boot
     directive.sparse_write = sparse_write
     directive.write_multi2optee = write_multi2optee
@@ -465,7 +480,7 @@ def find_first_non_printable_index(data) -> int:
     allowed_bytes = set(range(32, 127)) | {9, 10, 13}
     for index, byte in enumerate(data):
         if byte not in allowed_bytes:
-            return index   
+            return index
     return -1
 
         #Looks for var_name in text and returns its value converted to int
@@ -481,7 +496,7 @@ def get_variable_value(text: str, var_name: str) -> int:
         #Looks for Mstar script at specified offset, returns script
 def is_mstar_script( in_file: str, offset: int, size: int) -> str:
     header = loadPart(in_file, offset, size)
-    # Looking for the end of script simbol ("%") near the script end, 
+    # Looking for the end of script simbol ("%") near the script end,
     # assuming that the script can't be less than 40 symbols
     end_offset = find_first_non_printable_index(header)
     if end_offset > 40:
@@ -494,17 +509,72 @@ def is_mstar_script( in_file: str, offset: int, size: int) -> str:
         # Decrypts in_file data using OpenSSL
         # AES-128-CBC-NoPadding or AES-128-ECB-NoPadding algorithm
         # Saves decrypted data to out_file
-def aes_decrypt(in_file: str, out_file: str, cbc_ecb: str, aes_key: bytes, iv:bytes):
-    command = 'openssl aes-128-' + cbc_ecb + ' -d  -nopad -K ' + aes_key.hex()
+def aes_decrypt(in_file: str, out_file: str, cbc_ecb: str, aes_key: bytes, iv = b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'):
+    if not check_openssl_cli():
+        print('[!] To decrypt data you need to install OpenSSL')
+        return False
+    command = 'openssl aes-128-' + cbc_ecb.lower() + ' -d -nopad -K ' + aes_key.hex()
+    if (cbc_ecb == 'cbc') or (cbc_ecb == 'CBC') :
+        command += ' -iv ' + iv.hex()
+    command += ' -in ' + in_file + ' -out ' + out_file
+    os.system(command)
+    return True
+
+        # Encrypts in_file data using OpenSSL
+        # AES-128-CBC-NoPadding or AES-128-ECB-NoPadding algorithm
+        # Saves encrypted data to out_file
+def aes_encrypt(in_file: str, out_file: str, cbc_ecb: str, aes_key: bytes, iv = b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'):
+    if not check_openssl_cli():
+        print('[!] To encrypt data you need to install OpenSSL')
+        return False
+    command = 'openssl aes-128-' + cbc_ecb.lower() + ' -e -nopad -K ' + aes_key.hex()
     if (cbc_ecb == 'cbc') or (cbc_ecb == 'CBC') : 
         command += ' -iv ' + iv.hex()
     command += ' -in ' + in_file + ' -out ' + out_file
-    os.system(command)  
+    os.system(command)
+    return True
 
-        # Checks whether OpenSSL is installed
+        #Creates RSA signature of in_files and stores it in out_file
+def RSA_sign(in_file: str, out_file: str, private_key: str):
+    if not check_openssl_cli():
+        print('[!] To create RSA signature you need to install OpenSSL')
+        return False
+    command = 'openssl dgst -sha256 -sign ' + private_key + ' -out ' + out_file + ' ' + in_file
+    os.system(command)
+    return True
+
+        # Checks if OpenSSL is installed
 def check_openssl_cli():
     try:
         result = subprocess.run(["openssl", "version"], capture_output=True, text=True, check=True)
         return True
     except (subprocess.CalledProcessError, FileNotFoundError):
         return False
+
+        # Checks if lzop is installed
+def check_lzop_cli():
+    lzop = 'bin\\win32\\lzop.exe' if os.name == 'nt' else 'lzop'
+    try:
+        result = subprocess.run([lzop, "-V"], capture_output=True, text=True, check=True)
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return False
+
+        #Creates Mstar image signature
+def create_img_sign(out_file: str, size: int, signature: str) :
+    with open(out_file, 'wb') as f1:
+        f1.write(CONTINUE_MODE_ID)
+        f1.write(CHUNK_NUMBER)
+        f1.write(size.to_bytes(4, byteorder='little'))
+        with open (signature, 'rb') as f2:
+            data = f2.read()
+        f1.write(data)
+        f1.write(INTERLEAVE_MODE_ID)
+        f1.write(CHUNK_NUMBER)
+        f1.write(size.to_bytes(4, byteorder='little'))
+        f1.write(data)
+    if (os.path.getsize(out_file) != MSTAR_SIGN_SIZE) :
+        print(f'[!] Something went wrong. Generated signature file size: {hex(os.path.getsize(out_file))} bytes')
+        return False
+    else:
+        return True

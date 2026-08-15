@@ -1,4 +1,4 @@
-# unpack.py v1.5
+# unpack.py v1.5.1
 
 import sys
 import os
@@ -65,10 +65,8 @@ if headerScript is not None:
     print ('[i] Mstar script found')
     headerScriptFound = True
 else:
-    # Tryind to decrypt header with Mstar AESupgrade key
-    if utils.check_openssl_cli():
-        # Trying to find script in decrypted header
-        utils.aes_decrypt(header_file, header_file + '.bin', 'ecb', MSTAR_AES_KEY, MSTAR_AES_IV)
+    # Tryind to decrypt header with Mstar AESupgrade key and find the sript in decryped header
+    if utils.aes_decrypt(header_file, header_file + '.bin', 'ecb', MSTAR_AES_KEY):
         headerScript = utils.is_mstar_script(header_file + '.bin', 0, HEADER_SIZE_MTK)
         if headerScript is not None:
             print ('[i] Encrypted Mstar script found')
@@ -76,9 +74,6 @@ else:
             encrypted_ecb = True
         else:
             os.remove(header_file + '.bin')
-    else:
-        print ('[i] Did not find Mstar script in plain data.')
-        print ('[i] To try to decrypt data you need to have OpenSSL installed') 
 
 if not headerScriptFound :
     print ("[i] Failed.")
@@ -99,21 +94,18 @@ if not headerScriptFound :
                 print ('[i] MTK-Mstar script found')
                 headerScriptFound = True
             else:
-                if utils.check_openssl_cli():
-                    # Trying to find script in decrypted header
-                    utils.copyPart(inputFile, header_file + '_mtk', offset, HEADER_SIZE_MTK)
-                    utils.aes_decrypt(header_file + '_mtk', header_file + '_mtk.bin', 'cbc', MSTAR_AES_KEY, MSTAR_AES_IV)
+                # Trying to find script in decrypted header
+                utils.copyPart(inputFile, header_file + '_mtk', offset, HEADER_SIZE_MTK)
+                if utils.aes_decrypt(header_file + '_mtk', header_file + '_mtk.bin', 'cbc', MSTAR_AES_KEY, MSTAR_AES_IV):
                     headerScript = utils.is_mstar_script(header_file + '_mtk.bin', 0, HEADER_SIZE_MTK)
                     if headerScript is not None:
                         print ("[i] Encrypted MTK-Mstar script found")
                         headerScriptFound = True
                         encrypted_cbc = True
+                        os.remove(header_file + '_mtk')
                     else:
                         os.remove(header_file + '_mtk')
                         os.remove(header_file + '_mtk.bin')
-                else:
-                    print ('[i] Did not find MTK-Mstar script in plain data.')
-                    print ('[i] To try to decrypt data you need to have OpenSSL installed')
 
 if not headerScriptFound:
     print ('[i] Failed.')
@@ -319,7 +311,9 @@ for line in headerScript.splitlines():
                 utils.copyPart(inputFile, tempCompFile, int(offset, 16), int(size, 16))
                 # unpack .comp -> .decomp
                 print ('[i]         Decompressing LZO (Please be patient)...')
-                utils.unlzo(tempCompFile, tempDecompFile)
+                if not utils.unlzo(tempCompFile, tempDecompFile):
+                    print ('[ERROR] Decompression failed')
+                    quit()
                 size = hex(os.path.getsize(tempDecompFile))
                 print (f'[i]         Done. Decompressed size: {size} ({utils.sizeStr(int(size, 16))}).') 
                 # rename .decomp to .img
@@ -339,7 +333,9 @@ for line in headerScript.splitlines():
                 utils.copyPart(inputFile, tempCompFile, int(offset, 16), int(size, 16))
                 # unpack .comp -> .decomp
                 print ('[i]         Decompressing LZO (Please be patient)...')
-                utils.unlzo(tempCompFile, tempDecompFile)
+                if not utils.unlzo(tempCompFile, tempDecompFile):
+                    print ('[ERROR] Decompression failed')
+                    quit()
                 size = hex(os.path.getsize(tempDecompFile))
                 print (f'[i]         Done. Decompressed size: {size} ({utils.sizeStr(int(size, 16))}).') 
                 # append .decomp to .img

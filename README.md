@@ -6,13 +6,14 @@ Currently available tools:
  - **unpack.py** - unpack MStar bin firmware
  - **pack.py** - pack MStar bin firmware
  - **extract_keys.py** - extract AES and RSA-public keys from MBOOT binary
- - **secure_partition.py** - encrypt image and generate signature file
+ - **secure_partition.py** - encrypt image and generate signature file (Windows only)
+ - **secure_partition_v2.py** - same as latter but works on any OS with Python3 and OpenSSL installed
   
 ## Installing on Windows
 
-On Windows you just need to have Python 3 installed
+On Windows you just need to have Python3  and OpenSSL installed
 
-## Installing on Linux *
+## Installing on Linux
 
 On Linux you need to have python3, openssl and lzop installed and some binaries in bin/linux folder.
 
@@ -31,8 +32,6 @@ You may need to replace them with the ones compiled for your system.
 	$make
 	Replace simg2img, img2simg, simg2simg binaries in mstar-bin-tool/bin/linux folder.
 	
-* Signature generation is not supported on Linux yet.
-
 ## Unpack MStar bin firmware files
 
 ```
@@ -95,16 +94,20 @@ openssl aes-128-ecb -nopad -d  -K 0007FF4154534D92FC55AA0FFF0110E0 -in <in_file>
 
 ``` 
 
-## Encrypt partition and generate signature *
+## Encrypt partition and generate signature
 All new MStar builds have SECURE_BOOT option enabled. In that case 
 boot.img and recovery.img is encrypted (AES) and signed with RSA priv keys.
 That script is used to encrypt image and generate sign file. 
+Works only on Windows because uses external utilities and the only known versions are Windows executables.
 
 ```
 Usage: secure_partition.py <file to encrypt> <AES key file> <RSA private key file> <RSA public key file> <output encrypted file> <output signature file>
 Example: secure_partition.py ./pack/boot.img ./keys/AESbootKey ./keys/RSAboot_priv.txt ./keys/RSAboot_pub.txt ./pack/boot.img.aes ./pack/bootSign
 ```
-* This feature is not supported on linux yet.
+
+New script added - `secure_partition_v2.py`
+It does the same job but doesn't depend on external utilities, uses only OpenSSL functions and therefore can be used on Linux as well.
+Run the script with `-h` argument to see usage info.
 
 ## Extract keys from Mstar.Key.Bank structure
 AES keys can be extracted from MBOOT with extract_keys.py script. 
