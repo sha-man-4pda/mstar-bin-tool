@@ -19,7 +19,7 @@ On Linux you need to have python3, openssl and lzop installed and some binaries 
 
 There are binaries compiled for Ubuntu 25.04 x64 in bin/linux folder. 
 You may need to replace them with the ones compiled for your system.
-
+```
 - tinyZZZ - compressor/decompressor for different formats, to decompress LZ4 and LZMA.
 	$git clone https://github.com/WangXuan95/TinyZZZ.git
 	$cd TinyZZZ
@@ -31,7 +31,7 @@ You may need to replace them with the ones compiled for your system.
 	$cd android-simg2img
 	$make
 	Replace simg2img, img2simg, simg2simg binaries in mstar-bin-tool/bin/linux folder.
-	
+```	
 ## Unpack MStar bin firmware files
 
 ```
