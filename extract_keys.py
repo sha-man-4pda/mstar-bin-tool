@@ -71,7 +71,7 @@ DEBUG = False
 
 # Default values
 defOutFolder = "keys"
-defOffet = "0x168e00"
+defOffset = "0x168e00"
 defSize = "0x450"
 #defKey="hex:E01001FF0FAA55FC924D535441FF0700"
 
@@ -124,11 +124,11 @@ if len(sys.argv) == 1:
 
 mboot = sys.argv[1]
 outFolder = sys.argv[2] if len(sys.argv) >= 3 else defOutFolder
-offestStr = sys.argv[3] if len(sys.argv) >= 4 else defOffet
+offsetStr = sys.argv[3] if len(sys.argv) >= 4 else defOffset
 sizeStr = sys.argv[4] if len(sys.argv) >= 5 else defSize
 #hwKey = sys.argv[5] if len(sys.argv) >= 6 else defKey
 
-offset = int(offestStr, 16)
+offset = int(offsetStr, 16)
 size = int(sizeStr, 16)
 
 # Create out directory 
