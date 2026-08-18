@@ -6,6 +6,7 @@ Currently available tools:
  - **unpack.py** - unpack MStar bin firmware
  - **pack.py** - pack MStar bin firmware
  - **extract_keys.py** - extract AES and RSA-public keys from MBOOT binary
+ - **extract_keys_v2.py** - improved version of extract_keys.py, extracts keys from any file without specifying offset
  - **secure_partition.py** - encrypt image and generate signature file (Windows only)
  - **secure_partition_v2.py** - same as latter but works on any OS with Python3 and OpenSSL installed
   
